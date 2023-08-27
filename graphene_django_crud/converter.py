@@ -23,7 +23,9 @@ from graphene import (
     Date,
     Time,
 )
-
+from django.db.models import JSONField
+from graphene.types import Scalar
+from graphql.language import ast
 from graphene.utils.str_converters import to_camel_case
 from functools import singledispatch
 
@@ -44,12 +46,26 @@ from .input_types import (
     TimeFilter,
     DateFilter,
     UUIDFilter,
+    JSONString,
 )
 
 
 NAME_PATTERN = r"^[_a-zA-Z][_a-zA-Z0-9]*$"
 COMPILED_NAME_PATTERN = re.compile(NAME_PATTERN)
 
+class JSONScalar(Scalar):
+    @staticmethod
+    def serialize(dt):
+        return dt
+
+    @staticmethod
+    def parse_literal(node):
+        if isinstance(node, ast.StringValue):
+            return node.value
+
+    @staticmethod
+    def parse_value(value):
+        return value
 
 def make_input_type(name, definition, registry=None):
     ret_type = type(
@@ -352,6 +368,7 @@ def convert_django_field_with_choices(field, registry=None, input_flag=None):
     return convert_django_field(field, registry, input_flag)
 
 
+
 def construct_fields(
     model,
     registry,
@@ -382,8 +399,7 @@ def convert_django_field(field, registry=None, input_flag=None):
             field, field.__class__
         )
     )
-
-
+@convert_django_field.register(JSONField)
 @convert_django_field.register(models.CharField)
 @convert_django_field.register(models.TextField)
 @convert_django_field.register(models.EmailField)
@@ -404,6 +420,11 @@ def convert_field_to_string(field, registry=None, input_flag=None):
         required=is_required(field) and input_flag == "create",
     )
 
+def convert_field_to_json(field, registry=None, input_flag=None):
+    return JSONScalar(
+        description=field.help_text or field.verbose_name,
+        required=is_required(field) and input_flag == "create",
+    )
 
 @convert_django_field.register(models.AutoField)
 @convert_django_field.register(models.BigAutoField)
